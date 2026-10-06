@@ -26,6 +26,15 @@ struct Order{
   double price{};
 };
 
+
+
+struct Trade{
+  int BuyerID;
+  int SellerID;
+  int amount;
+  double price;
+};
+
 struct OrderPosition {
   orderType side;
   double price;
@@ -34,6 +43,7 @@ struct OrderPosition {
 struct SubmitResult {
   int filled;
   int remaining;
+  std::vector<Trade> trades;
 };
 
 class OrderBook{
@@ -45,10 +55,11 @@ class OrderBook{
     std::map<double, std::list<Order>, std::greater<double>> buys;
     std::map<double, std::list<Order>> sells;
     std::unordered_map<int, OrderPosition> orderIdtoPosition;
-    int matchAtPrice(std::list<Order> &current_list, int remaining);
+    int matchAtPrice(std::list<Order> &current_list, int remaining, std::vector<Trade>&trades, bool buy, int incomingID);
     std::optional<Order> getBestBid() const;
     std::optional<Order> getBestAsk() const;
-    int matchOrder(Order &order); // will return remaining amount in order
+    int matchOrder(
+        Order &order, std::vector<Trade> &trades); // will return remaining amount in order
     std::unordered_set<int> usedIDs;
 };
 
@@ -77,16 +88,19 @@ std::optional<Order> OrderBook::getBestAsk() const{
 SubmitResult OrderBook::submitOrder(Order order) {
   if (usedIDs.contains(order.orderID)){
     //only one allowed
-    return SubmitResult({0, order.amount});
+    return SubmitResult({0, order.amount, std::vector<Trade>{}});
   }
+
+
 
   usedIDs.insert(order.orderID);
   
   int original = order.amount;
-  int left = matchOrder(order);
+  std::vector<Trade> trades;
+  int left = matchOrder(order, trades);
   order.amount = left;
   if (left == 0)
-    return SubmitResult{original, 0};
+    return SubmitResult{original, 0, std::move(trades)};
 
   if (order.side == orderType::BUY){
     auto &level = buys[order.price];
@@ -109,7 +123,7 @@ SubmitResult OrderBook::submitOrder(Order order) {
     };
   }
 
-  return SubmitResult{original - left, left};
+  return SubmitResult{original - left, left, std::move(trades)};
 };
 
 void OrderBook::cancelOrder(int orderId){
@@ -136,8 +150,7 @@ void OrderBook::cancelOrder(int orderId){
   orderIdtoPosition.erase(orderId);
 };
 
-
-int OrderBook::matchOrder(Order& order){
+int OrderBook::matchOrder(Order &order, std::vector<Trade> &trades) {
   int remaining = order.amount;
   
   if (order.side == orderType::BUY){
@@ -145,7 +158,7 @@ int OrderBook::matchOrder(Order& order){
     for (auto it = sells.begin(); it != sells.end();){
       auto& [price, orders] = *it;
       if (price > order.price) break;
-      remaining = matchAtPrice(orders, remaining);
+      remaining = matchAtPrice(orders, remaining, trades, true, order.orderID);
 
       if (orders.empty()){
         it = sells.erase(it);
@@ -163,7 +176,7 @@ int OrderBook::matchOrder(Order& order){
       auto& [price, orders] = *it;
       if (price < order.price) break;
       //
-      remaining = matchAtPrice(orders, remaining);
+      remaining = matchAtPrice(orders, remaining, trades, false, order.orderID);
       if (orders.empty()) {
         it = buys.erase(it);
       } else {
@@ -174,25 +187,38 @@ int OrderBook::matchOrder(Order& order){
   }
 
   return remaining;
-
 }
 
-int OrderBook::matchAtPrice(std::list<Order> &current_list, int remaining) {
+int OrderBook::matchAtPrice(std::list<Order> &current_list, int remaining, std::vector<Trade>&trades, bool buy, int incomingId) {
   auto it = current_list.begin();
 
   while (it != current_list.end() && remaining > 0) {
+    int current {};
+    double price = it->price;
+    int buyerID, sellerID;
+    if (buy){
+      buyerID = incomingId;
+      sellerID = it->orderID;
+    } else{
+      buyerID = it->orderID;
+      sellerID = incomingId;
+    }
     if (it->amount > remaining) {
       it->amount -= remaining;
+      current = remaining;
       remaining = 0;
       ++it;
     } else {
       remaining -= it->amount;
-
+      current = it->amount;
       int orderId = it->orderID;
 
       it = current_list.erase(it);
       orderIdtoPosition.erase(orderId);
     }
+
+    trades.emplace_back(buyerID, sellerID, current, price);
+
   }
 
   return remaining;
