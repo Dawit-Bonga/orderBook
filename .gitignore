@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Compiled objects and debug info
+*.o
+*.obj
+*.out
+*.exe
+*.dSYM/
+a.out
+
+# Binaries from clang++ file.cpp -o file
+syntax
+orderBook
+
+# clangd cache
+.cache/
+
+# CMake build directories
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
