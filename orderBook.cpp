@@ -1,73 +1,7 @@
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <iostream>
-#include <ranges>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-#include <string>
-#include <cstring>
-#include <string_view>
-#include <optional>
-#include <map>
-#include <list>
-
-
-enum class orderType{
-  BUY,
-  SELL
-};
-
-struct Order{
-  orderType side;
-  int orderID{};
-  int amount{};
-  std::int64_t price{};
-};
-
-
-
-struct Trade{
-  int BuyerID;
-  int SellerID;
-  int amount;
-  std::int64_t price;
-};
-
-struct OrderPosition {
-  orderType side;
-  std::int64_t price;
-  std::list<Order>::iterator it;
-};
-struct SubmitResult {
-  int filled;
-  int remaining;
-  std::vector<Trade> trades;
-};
-
-class OrderBook{
-  public:
-    SubmitResult submitOrder(Order order);
-    void cancelOrder(int orderId);
-    void changeOrder(int orderID, int amount); // basically can increase amount they're selling or shortern but this will change their time priority
-    std::optional<Order> getBestBid() const;
-    std::optional<Order> getBestAsk() const;
-
-  private:
-    std::map<std::int64_t, std::list<Order>, std::greater<std::int64_t>> buys;
-    std::map<std::int64_t, std::list<Order>> sells;
-    std::unordered_map<int, OrderPosition> orderIdtoPosition;
-    int matchAtPrice(std::list<Order> &current_list, int remaining, std::vector<Trade>&trades, bool buy, int incomingID);
-    int matchOrder(
-        Order &order, std::vector<Trade> &trades); // will return remaining amount in order
-    std::unordered_set<int> usedIDs;
-    bool isValidOrder(const Order &order);
-};
+#include "include/orderBook.h"
 
 bool OrderBook::isValidOrder(const Order &order){
-  return order.amount > 0 && order.price >= 0;
+  return order.amount > 0 && order.price > 0;
 }
 
     std::optional<Order> OrderBook::getBestBid() const {
@@ -93,11 +27,11 @@ std::optional<Order> OrderBook::getBestAsk() const{
 SubmitResult OrderBook::submitOrder(Order order) {
   if (usedIDs.contains(order.orderID)){
     //only one allowed
-    return SubmitResult({0, order.amount, std::vector<Trade>{}});
+    return SubmitResult{SubmitStatus::DuplicateId, 0, order.amount, {}};
   }
 
   if (!isValidOrder(order)){
-    return SubmitResult{};
+    return SubmitResult{SubmitStatus::InvalidOrder, 0, order.amount, {}};
   }
 
     usedIDs.insert(order.orderID);
@@ -107,7 +41,7 @@ SubmitResult OrderBook::submitOrder(Order order) {
   int left = matchOrder(order, trades);
   order.amount = left;
   if (left == 0)
-    return SubmitResult{original, 0, std::move(trades)};
+    return SubmitResult{SubmitStatus::Ok, original, 0, std::move(trades)};
 
   if (order.side == orderType::BUY){
     auto &level = buys[order.price];
@@ -130,7 +64,7 @@ SubmitResult OrderBook::submitOrder(Order order) {
     };
   }
 
-  return SubmitResult{original - left, left, std::move(trades)};
+  return SubmitResult{SubmitStatus::Ok, original - left, left, std::move(trades)};
 };
 
 void OrderBook::cancelOrder(int orderId){
@@ -142,14 +76,16 @@ void OrderBook::cancelOrder(int orderId){
   auto& orderPosition = it->second;
 
   if (orderPosition.side == orderType::BUY){
-    buys.at(orderPosition.price).erase(orderPosition.it);
-    if (buys[orderPosition.price].empty()){
-      buys.erase(orderPosition.price);
+    auto level = buys.find(orderPosition.price); 
+    level->second.erase(orderPosition.it);
+    if (level->second.empty()){
+      buys.erase(level);
     }
   } else {
-    sells.at(orderPosition.price).erase(orderPosition.it);
-    if (sells[orderPosition.price].empty()) {
-      sells.erase(orderPosition.price);
+    auto level = sells.find(orderPosition.price);
+    level->second.erase(orderPosition.it);
+    if (level->second.empty()) {
+      sells.erase(level);
     }
   }
 
@@ -167,6 +103,8 @@ void OrderBook::changeOrder(int orderID, int amount){
 
   if (amount == 0){
     cancelOrder(orderID);
+    return;
+  } else if (amount > 0){
     return;
   }
   auto &orderPosition = found->second;
