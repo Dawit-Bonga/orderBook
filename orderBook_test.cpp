@@ -1,5 +1,6 @@
 #include "orderBook.cpp"
 
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -15,11 +16,11 @@ void expect(bool condition, const std::string& message) {
   }
 }
 
-Order makeOrder(orderType side, int id, int amount, double price) {
+Order makeOrder(orderType side, int id, int amount, std::int64_t price) {
   return Order{side, id, amount, price};
 }
 
-void expectTrade(const Trade& trade, int buyer, int seller, int amount, double price,
+void expectTrade(const Trade& trade, int buyer, int seller, int amount, std::int64_t price,
                  const std::string& message) {
   expect(trade.BuyerID == buyer, message + " buyer");
   expect(trade.SellerID == seller, message + " seller");

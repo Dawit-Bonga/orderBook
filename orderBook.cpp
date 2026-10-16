@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <ranges>
 #include <unordered_map>
@@ -23,7 +24,7 @@ struct Order{
   orderType side;
   int orderID{};
   int amount{};
-  double price{};
+  std::int64_t price{};
 };
 
 
@@ -32,12 +33,12 @@ struct Trade{
   int BuyerID;
   int SellerID;
   int amount;
-  double price;
+  std::int64_t price;
 };
 
 struct OrderPosition {
   orderType side;
-  double price;
+  std::int64_t price;
   std::list<Order>::iterator it;
 };
 struct SubmitResult {
@@ -55,16 +56,21 @@ class OrderBook{
     std::optional<Order> getBestAsk() const;
 
   private:
-    std::map<double, std::list<Order>, std::greater<double>> buys;
-    std::map<double, std::list<Order>> sells;
+    std::map<std::int64_t, std::list<Order>, std::greater<std::int64_t>> buys;
+    std::map<std::int64_t, std::list<Order>> sells;
     std::unordered_map<int, OrderPosition> orderIdtoPosition;
     int matchAtPrice(std::list<Order> &current_list, int remaining, std::vector<Trade>&trades, bool buy, int incomingID);
     int matchOrder(
         Order &order, std::vector<Trade> &trades); // will return remaining amount in order
     std::unordered_set<int> usedIDs;
+    bool isValidOrder(const Order &order);
 };
 
-std::optional<Order> OrderBook::getBestBid() const{
+bool OrderBook::isValidOrder(const Order &order){
+  return order.amount > 0 && order.price >= 0;
+}
+
+    std::optional<Order> OrderBook::getBestBid() const {
   if (buys.empty()){
     return std::nullopt;
   }
@@ -72,8 +78,6 @@ std::optional<Order> OrderBook::getBestBid() const{
   auto bestPrice = buys.begin();
 
   return bestPrice->second.front();
-
-
 }
 
 std::optional<Order> OrderBook::getBestAsk() const{
@@ -92,7 +96,11 @@ SubmitResult OrderBook::submitOrder(Order order) {
     return SubmitResult({0, order.amount, std::vector<Trade>{}});
   }
 
-  usedIDs.insert(order.orderID);
+  if (!isValidOrder(order)){
+    return SubmitResult{};
+  }
+
+    usedIDs.insert(order.orderID);
   
   int original = order.amount;
   std::vector<Trade> trades;
@@ -151,7 +159,7 @@ void OrderBook::cancelOrder(int orderId){
 
 void OrderBook::changeOrder(int orderID, int amount){
   //okay we need to be able to change it
-  // std::unordered_map<double, std::list<Order>> side;
+  // std::unordered_map<std::int64_t, std::list<Order>> side;
   auto found =  orderIdtoPosition.find(orderID);
   if (found == orderIdtoPosition.end()){
     return;
@@ -221,7 +229,7 @@ int OrderBook::matchAtPrice(std::list<Order> &current_list, int remaining, std::
 
   while (it != current_list.end() && remaining > 0) {
     int current {};
-    double price = it->price;
+    std::int64_t price = it->price;
     int buyerID, sellerID;
     if (buy){
       buyerID = incomingId;
