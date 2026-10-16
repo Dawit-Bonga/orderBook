@@ -156,6 +156,11 @@ void OrderBook::changeOrder(int orderID, int amount){
   if (found == orderIdtoPosition.end()){
     return;
   }
+
+  if (amount == 0){
+    cancelOrder(orderID);
+    return;
+  }
   auto &orderPosition = found->second;
 
   auto it = orderPosition.it;
