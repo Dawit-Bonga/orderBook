@@ -50,14 +50,15 @@ class OrderBook{
   public:
     SubmitResult submitOrder(Order order);
     void cancelOrder(int orderId);
+    void changeOrder(int orderID, int amount); // basically can increase amount they're selling or shortern but this will change their time priority
+    std::optional<Order> getBestBid() const;
+    std::optional<Order> getBestAsk() const;
 
   private:
     std::map<double, std::list<Order>, std::greater<double>> buys;
     std::map<double, std::list<Order>> sells;
     std::unordered_map<int, OrderPosition> orderIdtoPosition;
     int matchAtPrice(std::list<Order> &current_list, int remaining, std::vector<Trade>&trades, bool buy, int incomingID);
-    std::optional<Order> getBestBid() const;
-    std::optional<Order> getBestAsk() const;
     int matchOrder(
         Order &order, std::vector<Trade> &trades); // will return remaining amount in order
     std::unordered_set<int> usedIDs;
@@ -90,8 +91,6 @@ SubmitResult OrderBook::submitOrder(Order order) {
     //only one allowed
     return SubmitResult({0, order.amount, std::vector<Trade>{}});
   }
-
-
 
   usedIDs.insert(order.orderID);
   
@@ -150,6 +149,31 @@ void OrderBook::cancelOrder(int orderId){
   orderIdtoPosition.erase(orderId);
 };
 
+void OrderBook::changeOrder(int orderID, int amount){
+  //okay we need to be able to change it
+  // std::unordered_map<double, std::list<Order>> side;
+  auto found =  orderIdtoPosition.find(orderID);
+  if (found == orderIdtoPosition.end()){
+    return;
+  }
+  auto &orderPosition = found->second;
+
+  auto it = orderPosition.it;
+  int old_amount = it->amount;
+  it->amount = amount;
+  std::list<Order> *level = nullptr;
+  if (orderPosition.side == orderType::BUY) {
+    level = &buys.at(orderPosition.price);
+  } else {
+    level = &sells.at(orderPosition.price);
+  }
+
+  if (old_amount < amount && std::next(it) != level->end()){
+    level->splice(level->end(), *level, it);
+  }
+}
+
+
 int OrderBook::matchOrder(Order &order, std::vector<Trade> &trades) {
   int remaining = order.amount;
   
@@ -167,8 +191,6 @@ int OrderBook::matchOrder(Order &order, std::vector<Trade> &trades) {
       }
       if (remaining == 0) break;
     }
-
-
 
   } else if (order.side == orderType::SELL){
     // need to find highest priced buys and go down from there

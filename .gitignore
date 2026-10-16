@@ -12,6 +12,7 @@ a.out
 # Binaries from clang++ file.cpp -o file
 syntax
 orderBook
+orderBook_test
 
 # clangd cache
 .cache/
